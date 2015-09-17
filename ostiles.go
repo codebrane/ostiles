@@ -9,6 +9,8 @@ import (
   "strconv"
   "bufio"
   "fmt"
+  "path/filepath"
+"strings"
 )
 
 var ostilesFile string
@@ -23,10 +25,9 @@ func init() {
 	flag.StringVar(&helpFlag, "h", "show", "help")
 }
 
-func extractTilesFromOSTilesDatabase(ostilesDB string, tilesDir string) {
-
+func extractTilesFromOSTilesDatabase() {
   // sanity check the database
-  if _, err := os.Stat(ostilesDB); os.IsNotExist(err) {
+  if _, err := os.Stat(ostilesFile); os.IsNotExist(err) {
     log.Fatal(err)
     return
   }
@@ -35,7 +36,7 @@ func extractTilesFromOSTilesDatabase(ostilesDB string, tilesDir string) {
   os.MkdirAll(tilesDir, 0777)
 
   // open the tiles database
-  db, err := sql.Open("sqlite3", ostilesDB)
+  db, err := sql.Open("sqlite3", ostilesFile)
   if err != nil {
     log.Fatal(err)
   }
@@ -87,7 +88,114 @@ func extractTilesFromOSTilesDatabase(ostilesDB string, tilesDir string) {
   }
 }
 
-func createOSTilesDatabaseFromTiles(ostilesDB string, tilesDir string) {
+func createOSTilesDatabaseFromTiles() {
+  // create the OSTiles database
+  db, err := sql.Open("sqlite3", ostilesFile)
+  if err != nil {
+    log.Fatal(err)
+  }
+  defer db.Close()
+
+  // create the zoom_levels table
+  statement := "CREATE TABLE zoom_levels ("
+  statement += "zoom_level INTEGER PRIMARY KEY,"
+  statement += "product_code TEXT,"
+  statement += "bbox_x0 INTEGER,"
+  statement += "bbox_x1 INTEGER,"
+  statement += "bbox_y0 INTEGER,"
+  statement += "bbox_y1 INTEGER"
+  statement += ")"
+  _, err = db.Exec(statement)
+  if err != nil {
+    log.Printf("%q: %s\n", err, statement)
+    return
+  }
+
+  // create the tiles table
+  statement = "CREATE TABLE tiles ("
+  statement += "zoom_level INTEGER NOT NULL,"
+  statement += "tile_column INTEGER NOT NULL,"
+  statement += "tile_row INTEGER NOT NULL,"
+  statement += "tile_data BLOB,"
+  statement += "PRIMARY KEY (zoom_level, tile_column, tile_row)"
+  statement += ")"
+  _, err = db.Exec(statement)
+  if err != nil {
+    log.Printf("%q: %s\n", err, statement)
+    return
+  }
+}
+
+func addBoundingBoxesToDB() {
+  db, err := sql.Open("sqlite3", ostilesFile)
+  if err != nil {
+    log.Fatal(err)
+  }
+  defer db.Close()
+
+  sql := "INSERT INTO zoom_levels VALUES("
+  sql += "'" + strconv.Itoa(currentZoomLevel) + "',"
+  sql += "'Z" + strconv.Itoa(currentZoomLevel) + "',"
+  sql += "'" + strconv.Itoa(bbox_x0) + "',"
+  sql += "'" + strconv.Itoa(bbox_x1) + "',"
+  sql += "'" + strconv.Itoa(bbox_y0) + "',"
+  sql += "'" + strconv.Itoa(bbox_y1) + "'"
+  sql += ")"
+  _,err = db.Exec(sql)
+  if err != nil {
+    log.Fatal(err)
+  }
+}
+
+var currentZoomLevel = -1
+var bbox_x0 = 999
+var bbox_x1 = -1
+var bbox_y0 = 999
+var bbox_y1 = -1
+
+func putTilesInDB(path string, fileInfo os.FileInfo, err error) error {
+  // only care about png map tiles
+  if fileInfo.IsDir() || filepath.Ext(path) != ".png" {
+ 		return nil;
+ 	}
+
+  parts := strings.Split(path, "/")
+  zoomLevel,_ := strconv.Atoi(parts[len(parts)-3])
+  col,_ := strconv.Atoi(parts[len(parts)-2])
+  row,_ := strconv.Atoi(strings.Split(parts[len(parts)-1], ".")[0])
+
+  if col < bbox_x0 {
+    bbox_x0 = col
+  }
+  if col > bbox_x1 {
+    bbox_x1 = col
+  }
+
+  if row < bbox_y0 {
+    bbox_y0 = row
+  }
+  if row > bbox_y1 {
+    bbox_y1 = row
+  }
+
+  // are we switching zoom levels?
+  if zoomLevel != currentZoomLevel {
+    if currentZoomLevel != -1 {
+      bbox_x1 = (bbox_x1 - bbox_x0) + 1 // zero index
+      bbox_y1 = (bbox_y1 - bbox_y0) + 1 // zero index
+      addBoundingBoxesToDB()
+      log.Printf("bbox_x0=%d, bbox_x1=%d, bbox_y0=%d, bbox_y1=%d", bbox_x0, bbox_x1, bbox_y0, bbox_y1)
+    }
+    currentZoomLevel = zoomLevel
+    bbox_x0 = 999
+    bbox_x1 = -1
+    bbox_y0 = 999
+    bbox_y1 = -1
+  }
+
+  log.Printf("%s z=%d col=%d row=%d", path, zoomLevel, col, row)
+
+  return nil
 }
 
 func main() {
@@ -99,9 +207,14 @@ func main() {
  	}
 
   if mode == "extract" {
-    extractTilesFromOSTilesDatabase(ostilesFile, tilesDir)
+    extractTilesFromOSTilesDatabase()
   } else if mode == "create" {
-    createOSTilesDatabaseFromTiles(ostilesFile, tilesDir)
+    createOSTilesDatabaseFromTiles()
+    filepath.Walk(tilesDir, putTilesInDB)
+    bbox_x1 = (bbox_x1 - bbox_x0) + 1 // zero index
+    bbox_y1 = (bbox_y1 - bbox_y0) + 1 // zero index
+    addBoundingBoxesToDB()
+    log.Printf("bbox_x0=%d, bbox_x1=%d, bbox_y0=%d, bbox_y1=%d",bbox_x0,bbox_x1,bbox_y0,bbox_y1)
   } else {
     fmt.Println(mode + "? I don't know how to do that!")
   }
