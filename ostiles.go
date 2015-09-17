@@ -8,6 +8,7 @@ import (
   "os"
   "strconv"
   "bufio"
+  "fmt"
 )
 
 var ostilesFile string
@@ -55,7 +56,6 @@ func extractTilesFromOSTilesDatabase(ostilesDB string, tilesDir string) {
     var bbox_y1 int
     zoomLevelsrows.Scan(&zoom_level, &product_code, &bbox_x0, &bbox_x1, &bbox_y0, &bbox_y1)
     zoomLevelDir := tilesDir + "/" + strconv.Itoa(zoom_level)
-    log.Println("creating zoom level " + zoomLevelDir + " for product " + product_code)
     os.Mkdir(zoomLevelDir, 0777)
 
     log.Println("select * from tiles where zoom_level = '" + strconv.Itoa(zoom_level) + "'")
@@ -73,9 +73,10 @@ func extractTilesFromOSTilesDatabase(ostilesDB string, tilesDir string) {
       var tile_data []byte
       tilesRows.Scan(&tile_column, &tile_row, &tile_data)
       columnDir := zoomLevelDir + "/" + strconv.Itoa(tile_column)
-      log.Println("creating column " + columnDir + " - " + strconv.Itoa(tile_row))
       os.Mkdir(columnDir, 0777)
-      rowTilePNG, err := os.Create(columnDir + "/" + strconv.Itoa(tile_row) + ".png")
+      mapTile := columnDir + "/" + strconv.Itoa(tile_row) + ".png"
+      log.Println("creating map tile " + mapTile)
+      rowTilePNG, err := os.Create(mapTile)
       if err != nil {
         log.Fatal(err)
       }
@@ -86,6 +87,9 @@ func extractTilesFromOSTilesDatabase(ostilesDB string, tilesDir string) {
   }
 }
 
+func createOSTilesDatabaseFromTiles(ostilesDB string, tilesDir string) {
+}
+
 func main() {
   flag.Parse()
 
@@ -94,5 +98,11 @@ func main() {
  		return
  	}
 
-  extractTilesFromOSTilesDatabase(ostilesFile, tilesDir)
+  if mode == "extract" {
+    extractTilesFromOSTilesDatabase(ostilesFile, tilesDir)
+  } else if mode == "create" {
+    createOSTilesDatabaseFromTiles(ostilesFile, tilesDir)
+  } else {
+    fmt.Println(mode + "? I don't know how to do that!")
+  }
 }
