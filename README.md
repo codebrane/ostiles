@@ -15,7 +15,7 @@ the sample data in the OS iOS demo app:
 
 [sample.ostiles](https://github.com/OrdnanceSurvey/ios-sdk-demo-tilesources/tree/master/Resources)
 
-then run ostiles on it to extract the png map tiles:
+Download the sample.ostiles file and run ostiles on it to extract the png map tiles:
 
 <pre><code>
 ostiles -mode extract \
@@ -23,8 +23,18 @@ ostiles -mode extract \
         -tilesDir /path/to/tiles_from_db
 </code></pre>
 
-If we look at the OV0 product, this is the zoom level with least detail, corresponding to a 'furthest away' view of the
+We can examine the directory structure for zoom level 1, which is Product Code OV0 in sample.ostiles.
+This is the zoom level with least detail, corresponding to a 'furthest away' view of the
 map. The tiles are arranged on disk as per the MBTiles specification and look like this:
+
+<pre>
+tiles_from_db/1/0/ <- this means zoom level 1, column 0    
+0.png <- and these are the images for the rows in column 0  
+1.png <- i.e. 0,1  
+2.png
+</pre>
+
+which look like this in the context of the map tile data:
 
 ![Product Code OV0](ostiles.jpeg "Product Code OV0")
 
