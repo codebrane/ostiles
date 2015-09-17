@@ -13,16 +13,27 @@ import (
 "strings"
 )
 
-var ostilesFile string
-var mode string
-var tilesDir string
-var helpFlag string
+// http://stackoverflow.com/questions/14514201/how-to-read-a-binary-file-in-go
+func readFile(path string) ([]byte, error) {
+  file, err := os.Open(path)
 
-func init() {
-	flag.StringVar(&ostilesFile, "ostiles", "", "path to ostiles database file")
-	flag.StringVar(&mode, "mode", "extract", "extract|ingest")
-  flag.StringVar(&tilesDir, "tilesDir", "tiles", "the directory where the tiles are or where to put them")
-	flag.StringVar(&helpFlag, "h", "show", "help")
+  if err != nil {
+    return nil, err
+  }
+  defer file.Close()
+
+  stats, statsErr := file.Stat()
+  if statsErr != nil {
+    return nil, statsErr
+  }
+
+  var size int64 = stats.Size()
+  bytes := make([]byte, size)
+
+  bufr := bufio.NewReader(file)
+  _,err = bufr.Read(bytes)
+
+  return bytes, err
 }
 
 func extractTilesFromOSTilesDatabase() {
@@ -59,7 +70,6 @@ func extractTilesFromOSTilesDatabase() {
     zoomLevelDir := tilesDir + "/" + strconv.Itoa(zoom_level)
     os.Mkdir(zoomLevelDir, 0777)
 
-    log.Println("select * from tiles where zoom_level = '" + strconv.Itoa(zoom_level) + "'")
     tilesRows, err := db.Query("select tile_column, tile_row, tile_data from tiles where zoom_level = '" + strconv.Itoa(zoom_level) + "'")
     if err != nil {
       log.Fatal(err)
@@ -135,7 +145,7 @@ func addBoundingBoxesToDB() {
 
   sql := "INSERT INTO zoom_levels VALUES("
   sql += "'" + strconv.Itoa(currentZoomLevel) + "',"
-  sql += "'Z" + strconv.Itoa(currentZoomLevel) + "',"
+  sql += "'" + productCode + "',"
   sql += "'" + strconv.Itoa(bbox_x0) + "',"
   sql += "'" + strconv.Itoa(bbox_x1) + "',"
   sql += "'" + strconv.Itoa(bbox_y0) + "',"
@@ -145,6 +155,30 @@ func addBoundingBoxesToDB() {
   if err != nil {
     log.Fatal(err)
   }
+}
+
+func addTileToDB(col int, row int, tileData []byte) {
+  db, err := sql.Open("sqlite3", ostilesFile)
+  if err != nil {
+    log.Fatal(err)
+  }
+  defer db.Close()
+
+
+  tx, err := db.Begin()
+ 	if err != nil {
+ 		log.Fatal(err)
+ 	}
+ 	stmt, err := tx.Prepare("INSERT INTO tiles(zoom_level, tile_column, tile_row, tile_data) values(?, ?, ?, ?)")
+ 	if err != nil {
+ 		log.Fatal(err)
+ 	}
+ 	defer stmt.Close()
+  _, err = stmt.Exec(currentZoomLevel, col, row, tileData)
+  if err != nil {
+    log.Fatal(err)
+  }
+ 	tx.Commit()
 }
 
 var currentZoomLevel = -1
@@ -193,9 +227,26 @@ func putTilesInDB(path string, fileInfo os.FileInfo, err error) error {
     bbox_y1 = -1
   }
 
+  var pngData,_ = readFile(path)
+  addTileToDB(col, row, pngData)
+
   log.Printf("%s z=%d col=%d row=%d", path, zoomLevel, col, row)
 
   return nil
+}
+
+var ostilesFile string
+var mode string
+var tilesDir string
+var productCode string
+var helpFlag string
+
+func init() {
+	flag.StringVar(&ostilesFile, "ostiles", "", "path to ostiles database file")
+	flag.StringVar(&mode, "mode", "extract", "extract|ingest")
+  flag.StringVar(&tilesDir, "tilesDir", "tiles", "the directory where the tiles are or where to put them")
+  flag.StringVar(&productCode, "productCode", "none", "the official OS product code, e.g. 50K")
+	flag.StringVar(&helpFlag, "h", "show", "help")
 }
 
 func main() {
