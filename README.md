@@ -40,3 +40,6 @@ which look like this in the context of the map tile data:
 
 the above shows also the minimum/maximum columns/rows for the zoom level. We need these when we're creating an OSTiles
 database from map tiles on disk.
+
+## License
+GNU GENERAL PUBLIC LICENSE
