@@ -94,6 +94,7 @@ func extractTilesFromOSTilesDatabase() {
       tileDataFileWriter := bufio.NewWriter(rowTilePNG)
       tileDataFileWriter.Write(tile_data)
       tileDataFileWriter.Flush()
+			rowTilePNG.Close()
     }
   }
 }
@@ -193,10 +194,28 @@ func putTilesInDB(path string, fileInfo os.FileInfo, err error) error {
  		return nil;
  	}
 
-  parts := strings.Split(path, "/")
-  zoomLevel,_ := strconv.Atoi(parts[len(parts)-3])
-  col,_ := strconv.Atoi(parts[len(parts)-2])
-  row,_ := strconv.Atoi(strings.Split(parts[len(parts)-1], ".")[0])
+	var zoomLevel int
+	var col int
+	var row int
+	
+	if mode == "createim" {
+		// tile_0_1.png
+		parts := strings.Split(path, "_")
+		zoomLevel = 1
+		col,_ = strconv.Atoi(parts[1])
+		row,_ = strconv.Atoi(strings.Split(parts[2], ".")[0])
+	} else if mode == "createctb" {
+		// sx88-0-1.png
+		parts := strings.Split(path, "-")
+		zoomLevel = 1
+		col,_ = strconv.Atoi(parts[1])
+		row,_ = strconv.Atoi(strings.Split(parts[2], ".")[0])
+	} else {
+		parts := strings.Split(path, "/")
+	  zoomLevel,_ = strconv.Atoi(parts[len(parts)-3])
+	  col,_ = strconv.Atoi(parts[len(parts)-2])
+	  row,_ = strconv.Atoi(strings.Split(parts[len(parts)-1], ".")[0])
+	}
 
   if col < bbox_x0 {
     bbox_x0 = col
@@ -259,7 +278,7 @@ func main() {
 
   if mode == "extract" {
     extractTilesFromOSTilesDatabase()
-  } else if mode == "create" {
+  } else if mode == "create" || mode == "createim" {
     createOSTilesDatabaseFromTiles()
     filepath.Walk(tilesDir, putTilesInDB)
     bbox_x1 = (bbox_x1 - bbox_x0) + 1 // zero index
